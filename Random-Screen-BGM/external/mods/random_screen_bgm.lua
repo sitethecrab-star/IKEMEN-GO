@@ -601,12 +601,28 @@ end
 -- ============================================================
 
 local function onTitle()
-    enterScreen("title")
+
+    local s = getState("title")
+
+    if s.currentTrack == nil then
+        enterScreen("title")
+    else
+        drawScreen("title")
+    end
+
 end
 
 
 local function onOptions()
-    enterScreen("options")
+
+    local s = getState("options")
+
+    if s.currentTrack == nil then
+        enterScreen("options")
+    else
+        drawScreen("options")
+    end
+
 end
 
 
