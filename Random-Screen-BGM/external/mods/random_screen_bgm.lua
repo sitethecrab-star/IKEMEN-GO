@@ -756,14 +756,13 @@ then
     local originalMenuDraw = main.f_menuCommonDraw
 
     main.f_menuCommonDraw = function(...)
-        local result = {originalMenuDraw(...)}
+        local result1, result2, result3 = originalMenuDraw(...)
 
         if activeScreen ~= nil then
             drawScreen(activeScreen)
-            refresh()
         end
 
-        return table.unpack(result)
+        return result1, result2, result3
     end
 
 end
