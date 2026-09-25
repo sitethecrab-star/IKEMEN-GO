@@ -34,10 +34,19 @@
 --
 -- ============================================================
 
+local function displayUsesText(config)
+    return config.display == "text" or config.display == "both"
+end
+
+local function displayUsesSprite(config)
+    return config.display == "sprite" or config.display == "both"
+end
+
 local screenConfig = {
 
     title = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/title/",
         playlist = {
             -- {file = "sound/random_screen_bgm/title/My Song.mp3", sffGroup = 0, sffIndex = 4},
@@ -46,6 +55,7 @@ local screenConfig = {
 
     options = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/options/",
         playlist = {
         },
@@ -53,6 +63,7 @@ local screenConfig = {
 
     select = {
         enabled = true,
+        display = "sprite",
         folder = "sound/random_screen_bgm/select/",
         playlist = {
             {
@@ -75,6 +86,7 @@ local screenConfig = {
 
     versus = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/versus/",
         playlist = {
         },
@@ -82,6 +94,7 @@ local screenConfig = {
 
     results = {
         enabled = true,
+        display = "sprite",
         folder = "sound/random_screen_bgm/results/",
         playlist = {
         },
@@ -89,6 +102,7 @@ local screenConfig = {
 
     victory = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/victory/",
         playlist = {
         },
@@ -96,6 +110,7 @@ local screenConfig = {
 
     continue = {
         enabled = true,
+        display = "sprite",
         folder = "sound/random_screen_bgm/continue/",
         playlist = {
         },
@@ -103,6 +118,7 @@ local screenConfig = {
 
     hiscore = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/hiscore/",
         playlist = {
         },
@@ -110,6 +126,7 @@ local screenConfig = {
 
     challenger = {
         enabled = true,
+        display = "sprite",
         folder = "sound/random_screen_bgm/challenger/",
         playlist = {
         },
@@ -117,6 +134,7 @@ local screenConfig = {
 
     replay = {
         enabled = true,
+        display = "text",
         folder = "sound/random_screen_bgm/replay/",
         playlist = {
         },
@@ -125,6 +143,7 @@ local screenConfig = {
     -- Reserved: no dedicated public game-over hook in IKEMEN GO 1.0.0.
     gameover = {
         enabled = false,
+        display = "text",
         folder = "sound/random_screen_bgm/gameover/",
         playlist = {
         },
@@ -319,6 +338,12 @@ local function drawText(screen)
         return
     end
 
+    local config = screenConfig[screen]
+
+    if config == nil or not displayUsesText(config) then
+        return
+    end
+
     local s = getState(screen)
 
     if s.currentTrack == nil or s.startFrame == nil then
@@ -457,6 +482,12 @@ end
 local function drawSff(screen)
 
     if not musicSffConfig.enabled then
+        return
+    end
+
+    local config = screenConfig[screen]
+
+    if config == nil or not displayUsesSprite(config) then
         return
     end
 
