@@ -1,197 +1,184 @@
 -- ============================================================
 -- RANDOM SCREEN BGM
--- Ikemen GO 1.0.0
+-- IKEMEN GO 1.0.0
 -- ============================================================
 --
--- Generic random BGM manager for screen music.
+-- Random BGM manager for IKEMEN GO screens.
 --
--- Current screen:
+-- Supported screens:
+--   Title
+--   Options
 --   Character Select
+--   Versus
+--   Results
+--   Victory
+--   Continue
+--   Hiscore
+--   Challenger
+--   Replay entry
 --
--- BGM folder:
---   sound/random_screen_bgm/select/
---
--- Shared music SFF:
---   external/mods/random_screen_bgm/music.sff
---
--- Music title:
---   appears after 3 seconds
---   remains visible for 6 seconds
---   disappears automatically
---
--- SFF mapping:
---   Street Fighter 2       -> 0,1
---   Mortal Kombat          -> 0,2
---   The King Of Fighters 94-> 0,3
+-- Game Over is a storyboard in IKEMEN GO 1.0.0 and does not have
+-- a dedicated public hook, so its playlist is reserved for now.
 --
 -- ============================================================
 
 
 -- ============================================================
--- CONFIGURATION
+-- SCREEN CONFIGURATION
 -- ============================================================
 --
--- Everything in this section is intended to be edited by the
--- project author. The rest of the file is the module engine.
+-- Add songs to the playlist for each screen.
+--
+-- sffGroup / sffIndex are optional.
+-- They identify the corresponding image in music.sff.
 --
 -- ============================================================
+
+local screenConfig = {
+
+    title = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/title/",
+        playlist = {
+            -- {file = "sound/random_screen_bgm/title/My Song.mp3", sffGroup = 0, sffIndex = 4},
+        },
+    },
+
+    options = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/options/",
+        playlist = {
+        },
+    },
+
+    select = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/select/",
+        playlist = {
+            {
+                file = "sound/random_screen_bgm/select/Street Fighter 2.mp3",
+                sffGroup = 0,
+                sffIndex = 1,
+            },
+            {
+                file = "sound/random_screen_bgm/select/Mortal Kombat.mp3",
+                sffGroup = 0,
+                sffIndex = 2,
+            },
+            {
+                file = "sound/random_screen_bgm/select/The King Of Fighters 94.mp3",
+                sffGroup = 0,
+                sffIndex = 3,
+            },
+        },
+    },
+
+    versus = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/versus/",
+        playlist = {
+        },
+    },
+
+    results = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/results/",
+        playlist = {
+        },
+    },
+
+    victory = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/victory/",
+        playlist = {
+        },
+    },
+
+    continue = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/continue/",
+        playlist = {
+        },
+    },
+
+    hiscore = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/hiscore/",
+        playlist = {
+        },
+    },
+
+    challenger = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/challenger/",
+        playlist = {
+        },
+    },
+
+    replay = {
+        enabled = true,
+        folder = "sound/random_screen_bgm/replay/",
+        playlist = {
+        },
+    },
+
+    -- Reserved: no dedicated public game-over hook in IKEMEN GO 1.0.0.
+    gameover = {
+        enabled = false,
+        folder = "sound/random_screen_bgm/gameover/",
+        playlist = {
+        },
+    },
+
+}
 
 
 -- ============================================================
--- QUICK CONFIGURATION — EDIT ONLY THE MARKED BLOCKS
--- ============================================================
---
--- [1] MUSIC TITLE — GERAL
---     Enable/disable text, set appearance delay, duration, and prefix.
---
--- [2] MUSIC TITLE — APARÊNCIA
---     Font, position, size, alignment, and color.
---
--- [3] MUSIC SFF — APARÊNCIA
---     Enable/disable SFF, set file, position, size, and layer.
---
--- [4] PLAYLIST
---     Músicas e respectivos sprites do music.sff.
---
--- The rest of the file contains the internal module logic.
--- ============================================================
-
--- ============================================================
--- 1. MUSIC TITLE — GENERAL
+-- MUSIC TITLE
 -- ============================================================
 
 local musicTitleConfig = {
-
-    -- Enable or disable the music title.
-    enabled = true,              -- <<< EDIT HERE: true = text enabled | false = disabled
-
-    -- Seconds before the title appears.
-    delay = 3,                   -- <<< EDIT HERE: seconds before appearing
-
-    -- Seconds the title remains visible.
-    duration = 6,                -- <<< EDIT HERE: seconds visible
-
-    -- Text shown before the song name.
-    label = "MUSIC: ",           -- <<< EDIT HERE: text displayed before the song name
-
+    enabled = true,
+    delay = 3,
+    duration = 6,
+    label = "MUSIC: ",
 }
 
-
--- ============================================================
--- 2. MUSIC TITLE — APPEARANCE
--- ============================================================
 
 local musicTitleAppearance = {
+    font = "font/Roboto-Condensed.def",
+    x = 250,
+    y = 690,
+    scaleX = 0.50,
+    scaleY = 0.50,
 
-    -- Font file.
-    -- You can replace this with another .def font.
-    font = "font/Roboto-Condensed.def", -- <<< EDIT HERE: font
+    -- 0 = left | 1 = center | 2 = right
+    align = 0,
 
-    -- Position in the 1280x720 local coordinate space.
-    x = 250,                     -- <<< EDIT HERE: X position
-    y = 690,                     -- <<< EDIT HERE: Y position
-
-    -- Text size.
-    scaleX = 0.50,               -- <<< EDIT HERE: horizontal size
-    scaleY = 0.50,               -- <<< EDIT HERE: vertical size
-
-    -- Alignment:
-    -- 0 = left
-    -- 1 = center
-    -- 2 = right
-    align = 0,                   -- <<< EDIT HERE: 0 = left | 1 = center | 2 = right
-
-    -- Text color (RGB).
-    -- 255,255,255 = white
-    -- 255,0,0   = red
-    -- 0,255,0   = green
-    -- 0,0,255   = blue
     color = {
-        r = 0,                      -- <<< EDIT HERE: red (0-255)
-        g = 0,                      -- <<< EDIT HERE: green (0-255)
-        b = 255,                    -- <<< EDIT HERE: blue (0-255)
+        r = 0,
+        g = 0,
+        b = 255,
     },
-
 }
 
 
 -- ============================================================
--- 3. MUSIC SFF — APPEARANCE (1280x720 SPRITES)
+-- MUSIC SFF
 -- ============================================================
 
 local musicSffConfig = {
+    enabled = true,
+    file = "external/mods/random_screen_bgm/music.sff",
 
-    -- Enable or disable the SFF image.
-    enabled = true,              -- <<< EDIT HERE: true = SFF enabled | false = disabled
+    x = 0,
+    y = 0,
 
-    -- Shared SFF file.
-    file = "external/mods/random_screen_bgm/music.sff", -- <<< EDIT HERE: SFF file
+    scaleX = 1.00,
+    scaleY = 1.00,
 
-    -- Position of the SFF image.
-    -- IMPORTANT: the sprites are 1280x720.
-    -- To fill the entire screen, use X=0 and Y=0.
-    x = 0,                        -- <<< EDIT HERE: X position do SFF
-    y = 0,                        -- <<< EDIT HERE: Y position do SFF
-
-    -- SFF image size.
-    -- IMPORTANT: 1.00 = native size (1280x720).
-    scaleX = 1.00,                -- <<< EDIT HERE: horizontal size
-    scaleY = 1.00,                -- <<< EDIT HERE: vertical size
-
-    -- Drawing layer.
-    layer = 2,                   -- <<< EDIT HERE: drawing layer
-
-    -- Sprite facing.
-    facing = 1,                  -- <<< EDIT HERE: sprite facing
-
-}
-
-
--- ============================================================
--- 4. PLAYLIST
--- ============================================================
---
--- >>> EDIT HERE: adicione, remova ou altere músicas nesta lista.
---
--- file      = audio file
--- sffGroup  = SFF group
--- sffIndex  = SFF image index
---
--- Example:
---
--- {
---     file = "sound/random_screen_bgm/select/My Song.mp3",
---     sffGroup = 0,
---     sffIndex = 4,
--- },
---
--- ============================================================
-
--- CURRENT music.sff MAPPING:
---   0,1 = Street Fighter 2
---   0,2 = Mortal Kombat
---   0,3 = The King Of Fighters 94
---
-local playlist = {
-
-    {
-        file = "sound/random_screen_bgm/select/Street Fighter 2.mp3",
-        sffGroup = 0,
-        sffIndex = 1,
-    },
-
-    {
-        file = "sound/random_screen_bgm/select/Mortal Kombat.mp3",
-        sffGroup = 0,
-        sffIndex = 2,
-    },
-
-    {
-        file = "sound/random_screen_bgm/select/The King Of Fighters 94.mp3",
-        sffGroup = 0,
-        sffIndex = 3,
-    },
-
+    layer = 2,
+    facing = 1,
 }
 
 
@@ -199,23 +186,26 @@ local playlist = {
 -- INTERNAL STATE
 -- ============================================================
 
-local bag = {}
-local currentTrack = nil
-local pendingTrack = nil
-local musicRequested = false
-
--- This is deliberately started when playBgm() is executed,
--- not when f_selectReset runs.
-local musicStartFrame = nil
-
-local musicText = nil
-local musicAnim = nil
+local state = {}
 local musicSff = nil
 
 
--- ============================================================
--- LOCALCOORD
--- ============================================================
+local function getState(screen)
+
+    if state[screen] == nil then
+        state[screen] = {
+            bag = {},
+            currentTrack = nil,
+            startFrame = nil,
+            text = nil,
+            anim = nil,
+        }
+    end
+
+    return state[screen]
+
+end
+
 
 local function localcoord()
 
@@ -229,6 +219,7 @@ local function localcoord()
     end
 
     return 1280, 720
+
 end
 
 
@@ -236,44 +227,54 @@ end
 -- SHUFFLE BAG
 -- ============================================================
 
-local function refillBag()
+local function refillBag(config, s)
 
-    bag = {}
+    s.bag = {}
 
-    for i = 1, #playlist do
-        bag[i] = i
+    for i = 1, #config.playlist do
+        s.bag[i] = i
     end
 
-    for i = #bag, 2, -1 do
+    for i = #s.bag, 2, -1 do
         local j = math.random(i)
-        bag[i], bag[j] = bag[j], bag[i]
+        s.bag[i], s.bag[j] = s.bag[j], s.bag[i]
     end
 
 end
 
 
-local function nextTrack()
+local function nextTrack(screen)
 
-    if #playlist == 0 then
+    local config = screenConfig[screen]
+    local s = getState(screen)
+
+    if config == nil
+        or not config.enabled
+        or #config.playlist == 0
+    then
         return nil
     end
 
-    if #bag == 0 then
-        refillBag()
+    if #s.bag == 0 then
+        refillBag(config, s)
     end
 
-    local index = table.remove(bag)
+    local index = table.remove(s.bag)
 
-    return playlist[index]
+    if index == nil then
+        return nil
+    end
+
+    return config.playlist[index]
 
 end
 
 
 -- ============================================================
--- FILENAME
+-- MUSIC TITLE
 -- ============================================================
 
-local function getTrackName(path)
+local function trackName(path)
 
     local filename =
         path:match("([^/\\]+)$")
@@ -284,11 +285,7 @@ local function getTrackName(path)
 end
 
 
--- ============================================================
--- MUSIC TEXT
--- ============================================================
-
-local function createMusicText()
+local function createText()
 
     if type(textImgNew) ~= "function" then
         return nil
@@ -300,6 +297,7 @@ local function createMusicText()
         and type(textImgSetFont) == "function"
     then
         local font = fontNew(musicTitleAppearance.font)
+
         if font ~= nil then
             textImgSetFont(t, font)
         end
@@ -315,12 +313,15 @@ local function createMusicText()
 end
 
 
-local function drawMusicText()
+local function drawText(screen)
 
-    if not musicTitleConfig.enabled
-        or currentTrack == nil
-        or musicStartFrame == nil
-    then
+    if not musicTitleConfig.enabled then
+        return
+    end
+
+    local s = getState(screen)
+
+    if s.currentTrack == nil or s.startFrame == nil then
         return
     end
 
@@ -330,69 +331,66 @@ local function drawMusicText()
         return
     end
 
-    local elapsed =
-        (frame - musicStartFrame) / 60
+    local elapsed = (frame - s.startFrame) / 60
 
-    -- Before delay.
     if elapsed < musicTitleConfig.delay then
         return
     end
 
-    -- After delay + duration.
     if elapsed >=
-        (musicTitleConfig.delay + musicTitleConfig.duration)
+        musicTitleConfig.delay + musicTitleConfig.duration
     then
         return
     end
 
-    if musicText == nil then
-        musicText = createMusicText()
+    if s.text == nil then
+        s.text = createText()
     end
 
-    if musicText == nil then
+    if s.text == nil then
         return
     end
 
-    textImgReset(musicText)
+    textImgReset(s.text)
+
+    local w, h = localcoord()
 
     if type(textImgSetLocalcoord) == "function" then
-        local w, h = localcoord()
-        textImgSetLocalcoord(musicText, w, h)
+        textImgSetLocalcoord(s.text, w, h)
     end
 
     textImgSetScale(
-        musicText,
+        s.text,
         musicTitleAppearance.scaleX,
         musicTitleAppearance.scaleY
     )
 
     textImgSetPos(
-        musicText,
+        s.text,
         musicTitleAppearance.x,
         musicTitleAppearance.y
     )
 
     textImgSetAlign(
-        musicText,
+        s.text,
         musicTitleAppearance.align
     )
 
     textImgSetText(
-        musicText,
-        musicTitleConfig.label
-        .. getTrackName(currentTrack.file)
+        s.text,
+        musicTitleConfig.label .. trackName(s.currentTrack.file)
     )
 
     if type(textImgSetColor) == "function" then
         textImgSetColor(
-            musicText,
+            s.text,
             musicTitleAppearance.color.r,
             musicTitleAppearance.color.g,
             musicTitleAppearance.color.b
         )
     end
 
-    textImgDraw(musicText)
+    textImgDraw(s.text)
 
 end
 
@@ -401,7 +399,7 @@ end
 -- MUSIC SFF
 -- ============================================================
 
-local function loadMusicSff()
+local function loadSff()
 
     if not musicSffConfig.enabled then
         return
@@ -411,13 +409,15 @@ local function loadMusicSff()
         return
     end
 
-    musicSff =
-        sffNew(musicSffConfig.file)
+    musicSff = sffNew(musicSffConfig.file)
 
 end
 
 
-local function createMusicAnim(track)
+local function createAnim(screen)
+
+    local s = getState(screen)
+    local track = s.currentTrack
 
     if not musicSff
         or not track
@@ -433,11 +433,7 @@ local function createMusicAnim(track)
         .. tostring(track.sffIndex)
         .. ", 0,0, -1"
 
-    local anim =
-        animNew(
-            musicSff,
-            animDef
-        )
+    local anim = animNew(musicSff, animDef)
 
     if anim == nil then
         return nil
@@ -446,28 +442,10 @@ local function createMusicAnim(track)
     local w, h = localcoord()
 
     animSetLocalcoord(anim, w, h)
-
-    animSetScale(
-        anim,
-        musicSffConfig.scaleX,
-        musicSffConfig.scaleY
-    )
-
-    animSetLayerno(
-        anim,
-        musicSffConfig.layer
-    )
-
-    animSetFacing(
-        anim,
-        musicSffConfig.facing
-    )
-
-    animSetPos(
-        anim,
-        musicSffConfig.x,
-        musicSffConfig.y
-    )
+    animSetScale(anim, musicSffConfig.scaleX, musicSffConfig.scaleY)
+    animSetLayerno(anim, musicSffConfig.layer)
+    animSetFacing(anim, musicSffConfig.facing)
+    animSetPos(anim, musicSffConfig.x, musicSffConfig.y)
 
     animUpdate(anim)
 
@@ -476,12 +454,15 @@ local function createMusicAnim(track)
 end
 
 
-local function drawMusicSff()
+local function drawSff(screen)
 
-    if not musicSffConfig.enabled
-        or currentTrack == nil
-        or musicStartFrame == nil
-    then
+    if not musicSffConfig.enabled then
+        return
+    end
+
+    local s = getState(screen)
+
+    if s.currentTrack == nil or s.startFrame == nil then
         return
     end
 
@@ -491,63 +472,55 @@ local function drawMusicSff()
         return
     end
 
-    local elapsed =
-        (frame - musicStartFrame) / 60
+    local elapsed = (frame - s.startFrame) / 60
 
-    -- Same visibility window as the music title.
     if elapsed < musicTitleConfig.delay then
         return
     end
 
     if elapsed >=
-        (musicTitleConfig.delay + musicTitleConfig.duration)
+        musicTitleConfig.delay + musicTitleConfig.duration
     then
         return
     end
 
-    if musicAnim == nil then
-        musicAnim =
-            createMusicAnim(currentTrack)
+    if s.anim == nil then
+        s.anim = createAnim(screen)
     end
 
-    if musicAnim == nil then
+    if s.anim == nil then
         return
     end
 
-    animUpdate(musicAnim)
-    animDraw(musicAnim)
+    animUpdate(s.anim)
+    animDraw(s.anim)
 
 end
 
 
 -- ============================================================
--- REQUEST MUSIC
+-- SCREEN MUSIC
 -- ============================================================
 
-local function requestSelectMusic()
+local function playScreen(screen)
 
-    pendingTrack = nextTrack()
+    local config = screenConfig[screen]
 
-    musicRequested =
-        pendingTrack ~= nil
-
-end
-
-
--- ============================================================
--- PLAY MUSIC
--- ============================================================
-
-local function playPendingSelectMusic()
-
-    if not musicRequested
-        or pendingTrack == nil
+    if config == nil
+        or not config.enabled
+        or #config.playlist == 0
     then
-        return
+        return false
+    end
+
+    local track = nextTrack(screen)
+
+    if track == nil then
+        return false
     end
 
     playBgm({
-        bgm = pendingTrack.file,
+        bgm = track.file,
         loop = 1,
         volume = 100,
         loopstart = 0,
@@ -555,38 +528,142 @@ local function playPendingSelectMusic()
         interrupt = true,
     })
 
-    currentTrack = pendingTrack
+    local s = getState(screen)
 
-    -- IMPORTANT:
-    -- The timer starts exactly when the new BGM is requested.
-    musicStartFrame = getFrameCount()
+    s.currentTrack = track
+    s.startFrame = getFrameCount()
+    s.anim = nil
 
-    -- Force the SFF animation to be rebuilt for the new song.
-    musicAnim = nil
+    return true
 
-    pendingTrack = nil
-    musicRequested = false
+end
+
+
+local function drawScreen(screen)
+
+    local config = screenConfig[screen]
+
+    if config == nil
+        or not config.enabled
+        or #config.playlist == 0
+    then
+        return
+    end
+
+    drawSff(screen)
+    drawText(screen)
+
+end
+
+
+local function enterScreen(screen)
+
+    if playScreen(screen) then
+        drawScreen(screen)
+    end
 
 end
 
 
 -- ============================================================
--- SELECT HOOKS
+-- SCREEN HOOK HANDLERS
 -- ============================================================
+
+local function onTitle()
+    enterScreen("title")
+end
+
+
+local function onOptions()
+    enterScreen("options")
+end
+
 
 local function onSelectReset()
 
-    requestSelectMusic()
+    local s = getState("select")
+
+    s.currentTrack = nil
+    s.startFrame = nil
+    s.anim = nil
 
 end
 
 
-local function onSelectScreen()
+local function onSelect()
 
-    playPendingSelectMusic()
+    local s = getState("select")
 
-    drawMusicSff()
-    drawMusicText()
+    if s.currentTrack == nil then
+        enterScreen("select")
+    else
+        drawScreen("select")
+    end
+
+end
+
+
+local function onVersus()
+
+    local s = getState("versus")
+
+    if s.currentTrack == nil then
+        enterScreen("versus")
+    else
+        drawScreen("versus")
+    end
+
+end
+
+
+local function postMatchInit(screen)
+
+    local s = getState(screen)
+
+    s.currentTrack = nil
+    s.startFrame = nil
+    s.anim = nil
+
+    enterScreen(screen)
+
+end
+
+
+local function postMatchDraw(screen)
+
+    return function()
+        drawScreen(screen)
+    end
+
+end
+
+
+-- ============================================================
+-- REPLAY ENTRY
+-- ============================================================
+--
+-- IKEMEN GO 1.0.0 has no dedicated public replay hook.
+-- We select the replay track when the Replay menu item is entered.
+--
+-- ============================================================
+
+local function onMenuItem(t, item)
+
+    if t == nil
+        or item == nil
+        or t[item] == nil
+        or t[item].itemname ~= "replay"
+    then
+        return
+    end
+
+    local s = getState("replay")
+
+    s.currentTrack = nil
+    s.startFrame = nil
+    s.anim = nil
+
+    enterScreen("replay")
 
 end
 
@@ -595,13 +672,28 @@ end
 -- INITIALIZATION
 -- ============================================================
 
-loadMusicSff()
+loadSff()
 
 
 if type(hook) == "table"
     and type(hook.add) == "function"
 then
 
+    -- Title
+    hook.add(
+        "main.menu.loop",
+        "randomScreenBgmTitle",
+        onTitle
+    )
+
+    -- Options
+    hook.add(
+        "options.menu.loop",
+        "randomScreenBgmOptions",
+        onOptions
+    )
+
+    -- Character Select
     hook.add(
         "start.f_selectReset",
         "randomScreenBgmSelectReset",
@@ -610,8 +702,97 @@ then
 
     hook.add(
         "start.f_selectScreen",
-        "randomScreenBgmSelectScreen",
-        onSelectScreen
+        "randomScreenBgmSelect",
+        onSelect
+    )
+
+    -- Versus
+    hook.add(
+        "start.f_selectVersus",
+        "randomScreenBgmVersus",
+        onVersus
+    )
+
+    -- Results
+    hook.add(
+        "game.result_init",
+        "randomScreenBgmResultsInit",
+        function()
+            postMatchInit("results")
+        end
+    )
+
+    hook.add(
+        "game.result",
+        "randomScreenBgmResults",
+        postMatchDraw("results")
+    )
+
+    -- Victory
+    hook.add(
+        "game.victory_init",
+        "randomScreenBgmVictoryInit",
+        function()
+            postMatchInit("victory")
+        end
+    )
+
+    hook.add(
+        "game.victory",
+        "randomScreenBgmVictory",
+        postMatchDraw("victory")
+    )
+
+    -- Continue
+    hook.add(
+        "game.continue_init",
+        "randomScreenBgmContinueInit",
+        function()
+            postMatchInit("continue")
+        end
+    )
+
+    hook.add(
+        "game.continue",
+        "randomScreenBgmContinue",
+        postMatchDraw("continue")
+    )
+
+    -- Hiscore
+    hook.add(
+        "game.hiscore_init",
+        "randomScreenBgmHiscoreInit",
+        function()
+            postMatchInit("hiscore")
+        end
+    )
+
+    hook.add(
+        "game.hiscore",
+        "randomScreenBgmHiscore",
+        postMatchDraw("hiscore")
+    )
+
+    -- Challenger
+    hook.add(
+        "game.challenger_init",
+        "randomScreenBgmChallengerInit",
+        function()
+            postMatchInit("challenger")
+        end
+    )
+
+    hook.add(
+        "game.challenger",
+        "randomScreenBgmChallenger",
+        postMatchDraw("challenger")
+    )
+
+    -- Replay
+    hook.add(
+        "main.t_itemname",
+        "randomScreenBgmReplay",
+        onMenuItem
     )
 
 end
