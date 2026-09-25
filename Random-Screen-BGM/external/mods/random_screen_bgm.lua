@@ -207,6 +207,7 @@ local musicSffConfig = {
 
 local state = {}
 local musicSff = nil
+local activeScreen = nil
 
 
 local function getState(screen)
@@ -602,6 +603,8 @@ end
 
 local function onTitle()
 
+    activeScreen = "title"
+
     local s = getState("title")
 
     if s.currentTrack == nil then
@@ -614,6 +617,8 @@ end
 
 
 local function onOptions()
+
+    activeScreen = "options"
 
     local s = getState("options")
 
@@ -639,6 +644,8 @@ end
 
 local function onSelect()
 
+    activeScreen = "select"
+
     local s = getState("select")
 
     if s.currentTrack == nil then
@@ -652,6 +659,8 @@ end
 
 local function onVersus()
 
+    activeScreen = "versus"
+
     local s = getState("versus")
 
     if s.currentTrack == nil then
@@ -664,6 +673,8 @@ end
 
 
 local function postMatchInit(screen)
+
+    activeScreen = screen
 
     local s = getState(screen)
 
@@ -679,6 +690,7 @@ end
 local function postMatchDraw(screen)
 
     return function()
+        activeScreen = screen
         drawScreen(screen)
     end
 
@@ -704,6 +716,8 @@ local function onMenuItem(t, item)
         return
     end
 
+    activeScreen = "replay"
+
     local s = getState("replay")
 
     s.currentTrack = nil
@@ -720,6 +734,39 @@ end
 -- ============================================================
 
 loadSff()
+
+
+-- ============================================================
+-- MENU DRAW OVERLAY
+-- ============================================================
+--
+-- Standard menu hooks run before IKEMEN GO draws the menu.
+-- Drawing the music title directly from those hooks would make
+-- it get overwritten by the native menu renderer.
+--
+-- Wrap the common menu draw function so the music title/SFF is
+-- drawn after the native menu and remains visible.
+--
+-- ============================================================
+
+if type(main) == "table"
+    and type(main.f_menuCommonDraw) == "function"
+then
+
+    local originalMenuDraw = main.f_menuCommonDraw
+
+    main.f_menuCommonDraw = function(...)
+        local result = {originalMenuDraw(...)}
+
+        if activeScreen ~= nil then
+            drawScreen(activeScreen)
+            refresh()
+        end
+
+        return table.unpack(result)
+    end
+
+end
 
 
 if type(hook) == "table"
