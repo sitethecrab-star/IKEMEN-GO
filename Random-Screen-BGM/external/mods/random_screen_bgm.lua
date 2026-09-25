@@ -631,13 +631,25 @@ local function onOptions()
 end
 
 
-local function onSelectReset()
+local function resetScreenState(screen)
 
-    local s = getState("select")
+    local s = getState(screen)
 
     s.currentTrack = nil
     s.startFrame = nil
     s.anim = nil
+    s.text = nil
+
+end
+
+
+local function onSelectReset()
+
+    -- Returning to Character Select means the previous Versus
+    -- session has ended. Reset it so the next Versus entry gets
+    -- a new track and a new display timer.
+    resetScreenState("select")
+    resetScreenState("versus")
 
 end
 
