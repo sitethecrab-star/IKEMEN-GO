@@ -755,14 +755,23 @@ then
 
     local originalMenuDraw = main.f_menuCommonDraw
 
-    main.f_menuCommonDraw = function(...)
-        local result1, result2, result3 = originalMenuDraw(...)
+    main.f_menuCommonDraw = function(t, item, cursorPosY, moveTxt, sec, bg, skipClear, opts)
+
+        originalMenuDraw(
+            t,
+            item,
+            cursorPosY,
+            moveTxt,
+            sec,
+            bg,
+            skipClear,
+            opts
+        )
 
         if activeScreen ~= nil then
             drawScreen(activeScreen)
         end
 
-        return result1, result2, result3
     end
 
 end
