@@ -1,244 +1,218 @@
 # IKEMEN-GO Random Screen BGM
 
-A generic random screen BGM manager module for **IKEMEN GO**.
+A reusable random background-music manager for **IKEMEN GO 1.0.0**.
 
-The module allows screens to randomly select background music from a configurable playlist, with support for optional music titles and SFF-based visual music cards.
-
----
+The module assigns a configurable random playlist to supported game screens and can optionally display the current track title and/or a visual music card from a shared SFF file.
 
 ## Compatibility
 
 **IKEMEN GO 1.0.0**
 
-Compatible with the latest **IKEMEN GO 1.0** release.
-
-The module uses the external Lua scripting and hook system provided by IKEMEN GO and does not require modifications to the engine source code.
-
----
+The module uses IKEMEN GO's external Lua scripting and hook system and does not require modifications to the engine source code.
 
 ## Features
 
-- Randomly selects background music from a configurable playlist.
-- Uses a shuffle-bag system to avoid repeating songs until the playlist is exhausted.
-- Supports screen-specific BGM playlists.
-- Supports optional music title text.
-- Supports optional SFF-based music cards.
-- Supports 1280×720 SFF artwork at native resolution.
-- Allows text and SFF display to be enabled or disabled independently.
-- Configurable text position, size, font, alignment, and color.
-- Configurable SFF position, size, layer, and facing.
-- Configurable display delay and duration.
-- Does not require modifications to the IKEMEN GO engine source code.
-- Designed to be reusable across different IKEMEN GO projects.
+- Random BGM selection per supported screen.
+- Shuffle-bag system to avoid repeating a track until the current playlist is exhausted.
+- Independent playlists for each screen.
+- Music starts immediately when the screen cycle begins.
+- Optional music title display.
+- Optional SFF music-card display.
+- Three display modes: `text`, `sprite`, and `both`.
+- Configurable title position, font, scale, alignment, color, delay, and duration.
+- Configurable SFF position, scale, layer, and facing.
+- Shared SFF file for all music cards.
+- No engine source-code modifications required.
 
----
+## Supported Screens
 
-## How It Works
+- Main Menu / Title
+- Options
+- Character Select
+- Versus
+- Results
+- Victory
+- Continue
+- Hiscore
+- Challenger
+- Replay entry
 
-The module selects a random song from the configured playlist when the supported screen is opened.
+**Game Over:** reserved for now. In IKEMEN GO 1.0.0 it is handled as a storyboard and does not expose a dedicated public hook used by this module.
 
-The selected song is played automatically and the module can optionally display:
+## Installation
 
-1. A music title.
-2. An SFF-based music card.
-3. Both simultaneously.
-4. Neither, if both visual options are disabled.
-
-The playlist uses a shuffle-bag system, preventing the same song from being selected again until all available songs have been played.
-
----
-
-## File Structure
-
-A complete installation should look like this:
+Copy the following files into the corresponding locations of the IKEMEN GO installation:
 
 ```text
-IKEMEN-GO/
-│
-├── external/
-│   └── mods/
-│       │
-│       ├── random_screen_bgm.lua
-│       │
-│       └── random_screen_bgm/
-│           └── music.sff
-│
-└── ...
-
-Installation
-
-Copy the module files to your IKEMEN GO installation:
-
 external/
 └── mods/
     ├── random_screen_bgm.lua
-    │
     └── random_screen_bgm/
         └── music.sff
+```
 
-The module can then be loaded through the external script system of IKEMEN GO.
+Then load `random_screen_bgm.lua` through IKEMEN GO's external module system.
 
-Configuration
+The module does not include music files. Add the audio files to the configured `sound/random_screen_bgm/` folders.
 
-The main configuration is located at the beginning of:
+## Audio Folder Structure
 
+The recommended structure is:
+
+```text
+sound/
+└── random_screen_bgm/
+    ├── title/
+    ├── options/
+    ├── select/
+    ├── versus/
+    ├── results/
+    ├── victory/
+    ├── continue/
+    ├── hiscore/
+    ├── challenger/
+    ├── replay/
+    └── gameover/
+```
+
+## Configuration
+
+The main configuration is at the beginning of:
+
+```text
 external/mods/random_screen_bgm.lua
+```
 
-The configuration is divided into clearly marked sections.
+Each screen has:
 
-Music Title — General
+- `enabled`
+- `display`
+- `folder`
+- `playlist`
 
-Controls whether the music title is displayed and defines its timing.
+Example:
 
-local titleConfig = {
+```lua
+select = {
+    enabled = true,
+    display = "sprite",
+    folder = "sound/random_screen_bgm/select/",
+    playlist = {
+        {
+            file = "sound/random_screen_bgm/select/Street Fighter 2.mp3",
+            sffGroup = 0,
+            sffIndex = 1,
+        },
+    },
+},
+```
+
+Each playlist entry requires an audio path. `sffGroup` and `sffIndex` are used when the selected track has an associated image in `music.sff`.
+
+## Display Modes
+
+### Text
+
+```lua
+display = "text"
+```
+
+Shows the music title.
+
+### Sprite
+
+```lua
+display = "sprite"
+```
+
+Shows the corresponding image from the shared SFF.
+
+### Both
+
+```lua
+display = "both"
+```
+
+Shows the music title and SFF image simultaneously.
+
+## Music Title
+
+The default timing is:
+
+```lua
+local musicTitleConfig = {
     enabled = true,
     delay = 3,
     duration = 6,
     label = "MUSIC: ",
 }
-Music Title — Appearance
+```
 
-Controls the visual appearance of the music title.
+The music starts immediately. The visual information appears after the configured delay and remains visible for the configured duration.
 
-Available settings include:
+The music continues playing after the visual information disappears.
 
-Font
-X position
-Y position
-Horizontal scale
-Vertical scale
-Alignment
-RGB color
-SFF Music Cards
+## SFF Music Cards
 
-The module can display an image from a shared SFF file corresponding to the selected song.
+The default shared SFF file is:
 
-The default SFF location is:
-
+```text
 external/mods/random_screen_bgm/music.sff
+```
 
-SFF display can be enabled or disabled independently:
+Default native-resolution configuration:
 
-musicSffConfig.enabled = true
-
-The SFF position and scale are configurable.
-
-For 1280×720 artwork, native resolution is:
-
+```lua
 x = 0
 y = 0
-
 scaleX = 1.00
 scaleY = 1.00
+```
 
-This displays the artwork at its original 1280×720 resolution.
+A playlist entry can reference a sprite using:
 
-Text and SFF Display Modes
+```lua
+sffGroup = 0,
+sffIndex = 1,
+```
 
-The music title and SFF card can be controlled independently.
+The SFF can contain as many music cards as required by the project.
 
-Text + SFF
-titleConfig.enabled = true
-musicSffConfig.enabled = true
-Text only
-titleConfig.enabled = true
-musicSffConfig.enabled = false
-SFF only
-titleConfig.enabled = false
-musicSffConfig.enabled = true
-Both disabled
-titleConfig.enabled = false
-musicSffConfig.enabled = false
+## Shuffle Bag
 
-In this mode, the module continues to manage the random BGM selection without displaying additional visual information.
+The module uses a shuffle-bag system.
 
-Playlist
+When the playlist is exhausted, it is refilled and shuffled. This prevents the same track from being selected again before the other tracks in the current bag have been used.
 
-Songs are added to the playlist in the module configuration.
+## Music Files
 
-Each entry can contain:
+Music is not included with the module.
 
-Audio file path
-SFF group
-SFF index
+Users must provide their own audio files and configure their paths in the playlist.
 
 Example:
 
-{
-    file = "sound/random_screen_bgm/select/Street Fighter 2.mp3",
-    sffGroup = 0,
-    sffIndex = 1,
-},
-
-The user can add, remove, or replace songs according to their own project.
-
-SFF Sprite Mapping
-
-Each music entry can be associated with a sprite inside music.sff.
-
-Example:
-
-Group    Index
------    -----
-0        1
-0        2
-0        3
-
-The association is defined in the playlist configuration.
-
-For example:
-
-0,1 → Street Fighter 2
-0,2 → Mortal Kombat
-0,3 → The King Of Fighters 94
-
-The SFF file can contain as many music cards as required by the project.
-
-Music Files
-
-The module does not include music files.
-
-Users should provide their own audio files and configure their paths in the playlist.
-
-Example:
-
+```text
 sound/
 └── random_screen_bgm/
     └── select/
         ├── song1.mp3
         ├── song2.mp3
         └── song3.mp3
+```
 
-The audio files should be configured in random_screen_bgm.lua.
+## Notes
 
-Timing
+The module was tested with **IKEMEN GO 1.0.0** across the supported screens.
 
-The visual elements use configurable timing.
+The Main Menu, Character Select, Versus, Results, Victory, Continue, Hiscore, Challenger and Replay flows were tested successfully. Options was also tested successfully, with an occasional audio-start inconsistency observed during repeated manual testing.
 
-Example:
+The release build has debug logging disabled.
 
-delay = 3
-duration = 6
+## License
 
-This means:
+See the `LICENSE` file included with this module.
 
-The music starts immediately.
-The visual information appears after 3 seconds.
-The visual information remains visible for 6 seconds.
-The music continues playing normally after the visual information disappears.
-Requirements
-IKEMEN GO 1.0.0
-External Lua scripting
-random_screen_bgm.lua
-music.sff when SFF display is enabled
-User-provided music files
-
-No engine source-code modifications are required.
-
-License
-
-See the LICENSE file included with this module.
-
-Credits
+## Credits
 
 Developed for the IKEMEN GO community.
