@@ -41,12 +41,10 @@ local function debugLog(message)
 
     local line = "[Random Screen BGM] " .. tostring(message)
 
-    -- Console output, when the IKEMEN GO console is available.
     if type(print) == "function" then
         print(line)
     end
 
-    -- Persistent debug log for tests.
     if type(io) == "table" and type(io.open) == "function" then
         local file = io.open(debugConfig.file, "a")
 
@@ -400,6 +398,28 @@ local screenConfig = {
 }
 
 -- ============================================================
+-- GENERAL
+-- ============================================================
+
+local generalConfig = {
+    -- BGM volume used for every random track (0-100).
+    volume = 100,
+
+    -- Used to convert delay/duration (seconds) into engine frames.
+    framesPerSecond = 60,
+
+    -- Frames without a Select/Versus hook call before that screen is
+    -- considered finished (its state is then reset for the next visit).
+    leaveGraceFrames = 5,
+
+    -- Title/Options: frames after entry in which the chosen track is
+    -- re-requested without restarting it (guards against the engine
+    -- replacing or stopping it right after the menu opens).
+    menuSafetyFrames = { 20, 90 },
+}
+
+
+-- ============================================================
 -- MUSIC TITLE
 -- ============================================================
 
@@ -454,60 +474,119 @@ local musicSffConfig = {
 
 local state = {}
 local musicSff = nil
+local musicFont = nil
+local musicFontLoaded = false
 local activeScreen = nil
-local lastTextDebugFrame = {}
-local lastSelectFrame = nil
-local selectLeaveGraceFrames = 5
 
--- Generic freshness tracker: any "session" screen (select, versus,
--- results, victory, continue, hiscore, challenger, replay) stamps
--- its own frame every time its own hook fires. If the screen has
--- gone stale (its hook stopped firing), the draw wrapper further
--- below will refuse to draw it, no matter which menu we came back
--- to or which specific hook was supposed to catch the transition.
+-- Last frame in which each watched screen's own hook ran.
 local lastFrameByScreen = {}
-local staleGraceFrames = 5
+local watchedScreens = { "select", "versus" }
 
-local function markScreenFrame(screen)
-    lastFrameByScreen[screen] = getFrameCount()
+-- Display window in frames, computed once.
+local displayStartFrames =
+    musicTitleConfig.delay * generalConfig.framesPerSecond
+local displayEndFrames =
+    (musicTitleConfig.delay + musicTitleConfig.duration)
+    * generalConfig.framesPerSecond
+
+local unpackValues = table.unpack or unpack
+
+local function packValues(...)
+    return { n = select("#", ...), ... }
 end
+
+
+local function isScreenEnabled(config)
+    return config ~= nil
+        and config.enabled
+        and #config.playlist > 0
+end
+
 
 local function getState(screen)
 
-    if state[screen] == nil then
-        state[screen] = {
+    local s = state[screen]
+
+    if s == nil then
+        s = {
             bag = {},
+            lastIndex = nil,
             currentTrack = nil,
             startFrame = nil,
             text = nil,
+            textFailed = false,
             anim = nil,
+            animFailed = false,
             musicStarted = false,
+            postDrawAudioPending = false,
+            safetyStep = 0,
             cycle = 0,
-            textWindowLogged = false,
-            textDrawConfirmed = false,
-            textDrawLogged = false,
-            sffDrawConfirmed = false,
         }
+        state[screen] = s
     end
 
-    return state[screen]
+    return s
 
 end
 
 
 local function localcoord()
 
-    if motif
-        and motif.info
-        and motif.info.localcoord
-        and motif.info.localcoord[1]
-        and motif.info.localcoord[2]
-    then
-        return motif.info.localcoord[1], motif.info.localcoord[2]
+    local info = motif and motif.info
+    local lc = info and info.localcoord
+
+    if lc and lc[1] and lc[2] then
+        return lc[1], lc[2]
     end
 
     return 1280, 720
 
+end
+
+
+-- Clears the per-visit data of a screen. The shuffle bag is kept, so
+-- randomization continues across visits.
+local function resetScreenState(screen)
+
+    local s = getState(screen)
+
+    if debugConfig.enabled then
+        debugLog(
+            "Reset: " .. screen
+            .. " | Previous track: "
+            .. tostring(s.currentTrack and s.currentTrack.file)
+        )
+    end
+
+    s.currentTrack = nil
+    s.startFrame = nil
+    s.text = nil
+    s.textFailed = false
+    s.anim = nil
+    s.animFailed = false
+    s.musicStarted = false
+    s.postDrawAudioPending = false
+    s.safetyStep = 0
+
+end
+
+
+local function clearActiveScreen(reason)
+
+    if activeScreen ~= nil and debugConfig.enabled then
+        debugLog(
+            "Leave: " .. tostring(activeScreen)
+            .. " | Reason: " .. tostring(reason)
+        )
+    end
+
+    activeScreen = nil
+
+end
+
+
+local function markScreenFrame(screen)
+    lastFrameByScreen[screen] = getFrameCount()
 end
 
 
@@ -517,16 +596,26 @@ end
 
 local function refillBag(config, s)
 
-    s.bag = {}
+    local n = #config.playlist
+    local bag = {}
 
-    for i = 1, #config.playlist do
-        s.bag[i] = i
+    for i = 1, n do
+        bag[i] = i
     end
 
-    for i = #s.bag, 2, -1 do
+    for i = n, 2, -1 do
         local j = math.random(i)
-        s.bag[i], s.bag[j] = s.bag[j], s.bag[i]
+        bag[i], bag[j] = bag[j], bag[i]
     end
+
+    -- Tracks are taken from the end of the bag. Avoid playing the
+    -- same track twice in a row across a refill boundary.
+    if n > 1 and bag[n] == s.lastIndex then
+        local j = math.random(n - 1)
+        bag[n], bag[j] = bag[j], bag[n]
+    end
+
+    s.bag = bag
 
 end
 
@@ -534,14 +623,12 @@ end
 local function nextTrack(screen)
 
     local config = screenConfig[screen]
-    local s = getState(screen)
 
-    if config == nil
-        or not config.enabled
-        or #config.playlist == 0
-    then
+    if not isScreenEnabled(config) then
         return nil
     end
+
+    local s = getState(screen)
 
     if #s.bag == 0 then
         refillBag(config, s)
@@ -553,7 +640,25 @@ local function nextTrack(screen)
         return nil
     end
 
+    s.lastIndex = index
+
     return config.playlist[index]
+
+end
+
+
+-- interrupt = false asks the engine to keep the track if it is
+-- already playing, and only (re)start it when something else replaced it.
+local function playTrack(track, keepIfPlaying)
+
+    playBgm({
+        bgm = track.file,
+        loop = 1,
+        volume = generalConfig.volume,
+        loopstart = 0,
+        loopend = 0,
+        interrupt = not keepIfPlaying,
+    })
 
 end
 
@@ -564,62 +669,69 @@ end
 
 local function trackName(path)
 
-    local filename =
-        path:match("([^/\\]+)$")
-        or path
+    local filename = path:match("([^/\\]+)$") or path
+    local name = filename:gsub("%.[^%.]+$", "")
 
-    return filename:gsub("%.[^%.]+$", "")
+    return name
 
 end
 
 
-local function createText(screen)
+-- The font is loaded once and shared by every text object.
+local function getMusicFont()
+
+    if not musicFontLoaded then
+
+        musicFontLoaded = true
+
+        if type(fontNew) == "function" then
+            musicFont = fontNew(musicTitleAppearance.font)
+        end
+
+        if musicFont == nil then
+            debugLog("WARNING | font not loaded: " .. tostring(musicTitleAppearance.font))
+        end
+
+    end
+
+    return musicFont
+
+end
+
+
+-- Creates and fully configures the text object once per visit.
+-- Per frame, only textImgDraw is called.
+local function createText(track)
 
     if type(textImgNew) ~= "function" then
-        debugLog(screen .. " text create: ERROR | textImgNew unavailable")
         return nil
     end
 
     local t = textImgNew()
 
     if t == nil then
-        debugLog(screen .. " text create: ERROR | textImgNew returned nil")
         return nil
     end
 
-    debugLog(screen .. " text create: textImgNew OK")
+    local font = getMusicFont()
 
-    if type(fontNew) == "function"
-        and type(textImgSetFont) == "function"
-    then
-        local font = fontNew(
-            musicTitleAppearance.font
-        )
-
-        if font ~= nil then
-            textImgSetFont(t, font)
-            debugLog(
-                screen .. " text create: font OK | "
-                .. tostring(musicTitleAppearance.font)
-            )
-        else
-            debugLog(
-                screen .. " text create: WARNING | fontNew returned nil"
-            )
-        end
-    else
-        debugLog(
-            screen .. " text create: WARNING | fontNew/textImgSetFont unavailable"
-        )
+    if font ~= nil and type(textImgSetFont) == "function" then
+        textImgSetFont(t, font)
     end
 
     if type(textImgSetLocalcoord) == "function" then
         local w, h = localcoord()
         textImgSetLocalcoord(t, w, h)
-        debugLog(
-            screen .. " text create: localcoord OK | "
-            .. tostring(w) .. "x" .. tostring(h)
-        )
+    end
+
+    textImgSetScale(t, musicTitleAppearance.scaleX, musicTitleAppearance.scaleY)
+    textImgSetPos(t, musicTitleAppearance.x, musicTitleAppearance.y)
+    textImgSetAlign(t, musicTitleAppearance.align)
+    textImgSetText(t, musicTitleConfig.label .. trackName(track.file))
+
+    if type(textImgSetColor) == "function" then
+        local c = musicTitleAppearance.color
+        textImgSetColor(t, c.r, c.g, c.b)
     end
 
     return t
@@ -627,130 +739,28 @@ local function createText(screen)
 end
 
 
-local function drawText(screen)
-
-    if not musicTitleConfig.enabled then
-        return
-    end
-
-    local config = screenConfig[screen]
-
-    if config == nil or not displayUsesText(config) then
-        return
-    end
-
-    local s = getState(screen)
-
-    if s.currentTrack == nil or s.startFrame == nil then
-        return
-    end
-
-    local frame = getFrameCount()
-
-    if frame == nil then
-        return
-    end
-
-    local elapsed = (frame - s.startFrame) / 60
-
-    if (screen == "title" or screen == "options")
-        and elapsed >= musicTitleConfig.delay
-        and not s.textWindowLogged
-    then
-        s.textWindowLogged = true
-        lastTextDebugFrame[screen] = frame
-        debugLog(
-            screen .. " text window reached | Cycle: #"
-            .. tostring(s.cycle or 0)
-            .. " | Elapsed: " .. tostring(elapsed)
-            .. " | StartFrame: " .. tostring(s.startFrame)
-            .. " | Frame: " .. tostring(frame)
-        )
-    end
-
-    if elapsed < musicTitleConfig.delay then
-        return
-    end
-
-    if elapsed >=
-        musicTitleConfig.delay + musicTitleConfig.duration
-    then
-        return
-    end
+local function drawText(screen, s)
 
     if s.text == nil then
-        s.text = createText(screen)
+
+        if s.textFailed then
+            return
+        end
+
+        s.text = createText(s.currentTrack)
+
+        if s.text == nil then
+            s.textFailed = true
+            debugLog(screen .. " text create: ERROR")
+            return
+        end
+
     end
 
-    if s.text == nil then
-        debugLog(screen .. " text draw: ABORT | text object nil")
-        return
-    end
+    local ok, err = pcall(textImgDraw, s.text)
 
-    textImgReset(s.text)
-
-    local w, h = localcoord()
-
-    if type(textImgSetLocalcoord) == "function" then
-        textImgSetLocalcoord(s.text, w, h)
-    end
-
-    textImgSetScale(
-        s.text,
-        musicTitleAppearance.scaleX,
-        musicTitleAppearance.scaleY
-    )
-
-    textImgSetPos(
-        s.text,
-        musicTitleAppearance.x,
-        musicTitleAppearance.y
-    )
-
-    textImgSetAlign(
-        s.text,
-        musicTitleAppearance.align
-    )
-
-    textImgSetText(
-        s.text,
-        musicTitleConfig.label .. trackName(s.currentTrack.file)
-    )
-
-    if type(textImgSetColor) == "function" then
-        textImgSetColor(
-            s.text,
-            musicTitleAppearance.color.r,
-            musicTitleAppearance.color.g,
-            musicTitleAppearance.color.b
-        )
-    end
-
-    local drawOk, drawErr = pcall(function()
-        textImgDraw(s.text)
-    end)
-
-    if not drawOk then
-        debugLog(
-            screen .. " textImgDraw: ERROR | " .. tostring(drawErr)
-        )
-    elseif (screen == "title" or screen == "options")
-        and not s.textDrawConfirmed
-    then
-        s.textDrawConfirmed = true
-        debugLog(screen .. " textImgDraw: OK | Cycle: #" .. tostring(s.cycle or 0))
-    end
-
-    if (screen == "title" or screen == "options")
-        and not s.textDrawLogged
-    then
-        s.textDrawLogged = true
-        debugLog(
-            screen .. " text: DRAW | Cycle: #"
-            .. tostring(s.cycle or 0)
-            .. " | Track: " .. tostring(s.currentTrack.file)
-            .. " | Frame: " .. tostring(frame)
-        )
+    if not ok then
+        debugLog(screen .. " textImgDraw: ERROR | " .. tostring(err))
     end
 
 end
@@ -766,7 +776,10 @@ local function loadSff()
         return
     end
 
-    if not fileExists(musicSffConfig.file) then
+    if type(fileExists) == "function"
+        and not fileExists(musicSffConfig.file)
+    then
+        debugLog("WARNING | SFF not found: " .. musicSffConfig.file)
         return
     end
 
@@ -775,26 +788,19 @@ local function loadSff()
 end
 
 
-local function createAnim(screen)
+local function createAnim(track)
 
-    local s = getState(screen)
-    local track = s.currentTrack
-
-    if not musicSff
-        or not track
+    if musicSff == nil
         or track.sffGroup == nil
         or track.sffIndex == nil
     then
         return nil
     end
 
-    local animDef =
-        tostring(track.sffGroup)
-        .. ","
-        .. tostring(track.sffIndex)
-        .. ", 0,0, -1"
-
-    local anim = animNew(musicSff, animDef)
+    local anim = animNew(
+        musicSff,
+        tostring(track.sffGroup) .. "," .. tostring(track.sffIndex) .. ", 0,0, -1"
+    )
 
     if anim == nil then
         return nil
@@ -815,79 +821,35 @@ local function createAnim(screen)
 end
 
 
-local function drawSff(screen)
-
-    if not musicSffConfig.enabled then
-        return
-    end
-
-    local config = screenConfig[screen]
-
-    if config == nil or not displayUsesSprite(config) then
-        return
-    end
-
-    local s = getState(screen)
-
-    if s.currentTrack == nil or s.startFrame == nil then
-        return
-    end
-
-    local frame = getFrameCount()
-
-    if frame == nil then
-        return
-    end
-
-    local elapsed = (frame - s.startFrame) / 60
-
-    if elapsed < musicTitleConfig.delay then
-        return
-    end
-
-    if elapsed >=
-        musicTitleConfig.delay + musicTitleConfig.duration
-    then
-        return
-    end
+local function drawSff(screen, s)
 
     if s.anim == nil then
-        s.anim = createAnim(screen)
 
-        if s.anim ~= nil then
-            debugLog(
-                screen .. " SFF anim create: OK | Group: "
-                .. tostring(s.currentTrack.sffGroup)
-                .. " | Index: "
-                .. tostring(s.currentTrack.sffIndex)
-            )
-        else
+        -- A missing sprite is reported once, not retried every frame.
+        if s.animFailed then
+            return
+        end
+
+        s.anim = createAnim(s.currentTrack)
+
+        if s.anim == nil then
+            s.animFailed = true
             debugLog(
                 screen .. " SFF anim create: ERROR | Group: "
                 .. tostring(s.currentTrack.sffGroup)
-                .. " | Index: "
-                .. tostring(s.currentTrack.sffIndex)
+                .. " | Index: " .. tostring(s.currentTrack.sffIndex)
             )
+            return
         end
-    end
 
-    if s.anim == nil then
-        return
     end
 
     animUpdate(s.anim)
 
-    local drawOk, drawErr = pcall(function()
-        animDraw(s.anim)
-    end)
+    local ok, err = pcall(animDraw, s.anim)
 
-    if not drawOk then
-        debugLog(
-            screen .. " animDraw: ERROR | " .. tostring(drawErr)
-        )
-    elseif not s.sffDrawConfirmed then
-        s.sffDrawConfirmed = true
-        debugLog(screen .. " animDraw: OK")
+    if not ok then
+        debugLog(screen .. " animDraw: ERROR | " .. tostring(err))
     end
 
 end
@@ -897,105 +859,105 @@ end
 -- SCREEN MUSIC
 -- ============================================================
 
-local function beginScreenCycle(screen)
+local function drawScreen(screen)
 
-    local s = getState(screen)
+    local s = state[screen]
 
-    s.cycle = (s.cycle or 0) + 1
-    s.currentTrack = nil
-    s.startFrame = nil
-    s.anim = nil
-    s.text = nil
-    s.musicStarted = false
-    s.postDrawAudioPending = false
+    if s == nil or s.currentTrack == nil or s.startFrame == nil then
+        return
+    end
 
-    s.textWindowLogged = false
-    s.textDrawConfirmed = false
-    s.textDrawLogged = false
-    s.sffDrawConfirmed = false
+    local config = screenConfig[screen]
 
-    lastTextDebugFrame[screen] = nil
+    if not isScreenEnabled(config) then
+        return
+    end
 
-    return s.cycle
+    local frame = getFrameCount()
+
+    if frame == nil then
+        return
+    end
+
+    local elapsed = frame - s.startFrame
+
+    if elapsed < displayStartFrames or elapsed >= displayEndFrames then
+        return
+    end
+
+    local display = config.display
+
+    if musicSffConfig.enabled
+        and (display == "sprite" or display == "both")
+    then
+        drawSff(screen, s)
+    end
+
+    if musicTitleConfig.enabled
+        and (display == "text" or display == "both")
+    then
+        drawText(screen, s)
+    end
 
 end
 
 
-local function playScreen(screen)
+-- Starts a fresh visual cycle and picks a new track (does not play it).
+local function prepareScreen(screen)
 
     local config = screenConfig[screen]
 
-    if config == nil
-        or not config.enabled
-        or #config.playlist == 0
-    then
+    if not isScreenEnabled(config) then
         return false
     end
 
-    -- Every entry starts a completely fresh visual/audio cycle.
-    -- The shuffle bag itself is preserved, so randomization continues
-    -- across entries without reusing a track until the bag is empty.
-    local cycle = beginScreenCycle(screen)
+    resetScreenState(screen)
+
+    local s = getState(screen)
+    s.cycle = s.cycle + 1
+
     local track = nextTrack(screen)
 
     if track == nil then
-        debugLog("Cycle aborted: " .. screen)
         return false
     end
 
-    playBgm({
-        bgm = track.file,
-        loop = 1,
-        volume = 100,
-        loopstart = 0,
-        loopend = 0,
-        interrupt = true,
-    })
-
-    local s = getState(screen)
-
     s.currentTrack = track
     s.startFrame = getFrameCount()
-    s.musicStarted = true
+    s.musicStarted = false
 
-    debugLog(
-        "Cycle: " .. screen
-        .. " | #" .. tostring(cycle)
-        .. " | Track: " .. tostring(track.file)
-        .. " | Display: " .. tostring(config.display)
-        .. " | Frame: " .. tostring(s.startFrame)
-    )
+    if debugConfig.enabled then
+        debugLog(
+            "Cycle: " .. screen
+            .. " | #" .. tostring(s.cycle)
+            .. " | Track: " .. tostring(track.file)
+            .. " | Display: " .. tostring(config.display)
+            .. " | Frame: " .. tostring(s.startFrame)
+        )
+    end
 
     return true
 
 end
 
-local function drawScreen(screen)
 
-    local config = screenConfig[screen]
+-- Starts a fresh cycle and plays the new track right away.
+local function playScreen(screen)
 
-    if config == nil
-        or not config.enabled
-        or #config.playlist == 0
-    then
-        return
+    if not prepareScreen(screen) then
+        return false
     end
 
-    local s = getState(screen)
+    local s = state[screen]
+    playTrack(s.currentTrack)
+    s.musicStarted = true
 
-    if s.currentTrack == nil or s.startFrame == nil then
-        return
-    end
-
-    drawSff(screen)
-    drawText(screen)
+    return true
 
 end
 
 
 local function enterScreen(screen)
-
-    debugLog("Enter: " .. screen)
 
     if playScreen(screen) then
         drawScreen(screen)
@@ -1006,80 +968,13 @@ local function enterScreen(screen)
 end
 
 
-local function resetScreenState(screen)
-
-    local s = getState(screen)
-
-    if s.currentTrack ~= nil then
-        debugLog(
-            "Reset: " .. screen
-            .. " | Previous track: " .. tostring(s.currentTrack.file)
-        )
-    else
-        debugLog("Reset: " .. screen)
-    end
-
-    s.currentTrack = nil
-    s.startFrame = nil
-    s.anim = nil
-    s.text = nil
-    s.textDrawConfirmed = false
-    s.textDrawLogged = false
-    s.textWindowLogged = false
-    s.sffDrawConfirmed = false
-    s.musicStarted = false
-    s.postDrawAudioPending = false
-
-    lastTextDebugFrame[screen] = nil
-
-end
-
-
-local function clearActiveScreen(reason)
-
-    if activeScreen ~= nil then
-        debugLog(
-            "Leave: " .. tostring(activeScreen)
-            .. " | Reason: " .. tostring(reason)
-        )
-    end
-
-    activeScreen = nil
-
-end
-
-
 -- ============================================================
--- MENU RENDER / ENTRY ARCHITECTURE (V13)
+-- MENU RENDER / ENTRY ARCHITECTURE
 -- ============================================================
 --
--- The native IKEMEN GO flow is:
---
---   Main Menu loop
---       -> native title BGM / intro
---       -> main.f_menuCommonDraw()
---
---   Options loop
---       -> native options BGM
---       -> main.f_menuCommonDraw()
---
--- The important point is that main.menu.loop and options.menu.loop
--- are long-running loops. Their *.menu.loop hooks are NOT reliable
--- "entered this screen" events on every return.
---
--- V13 therefore does not use pendingMenuEntry, main.menu.loop hooks,
--- or refresh() as an entry trigger.
---
--- Instead, the active menu context is established for the duration
--- of the actual native loop. The first real common-menu draw in that
--- context starts a fresh screen cycle. refresh() is used ONLY for
--- rendering the already-active overlay, never for changing state.
---
--- This gives us one clear separation:
---
---   MENU LOOP  -> identifies where we are
+--   MENU LOOP  -> identifies where we are (menuContext)
 --   MENU DRAW  -> starts a cycle if needed
---   REFRESH    -> draws the active overlay
+--   REFRESH    -> draws the active overlay (never changes state)
 --
 -- Intro/storyboard refreshes happen outside menuDrawContext and can
 -- therefore never start Title BGM or draw the Title overlay.
@@ -1087,7 +982,6 @@ end
 -- ============================================================
 
 local refreshWrapped = false
-local refreshOverlayLogged = false
 local menuDrawWrapped = false
 local menuLoopsWrapped = false
 
@@ -1096,45 +990,12 @@ local menuContext = nil
 local menuDrawContext = nil
 
 
-local function reassertScreenMusic(screen)
-
-    local s = getState(screen)
-
-    if s.currentTrack == nil then
-        return false
-    end
-
-    playBgm({
-        bgm = s.currentTrack.file,
-        loop = 1,
-        volume = 100,
-        loopstart = 0,
-        loopend = 0,
-        interrupt = true,
-    })
-
-    debugLog(
-        "Post-draw BGM reassert: OK | Screen: "
-        .. tostring(screen)
-        .. " | Track: " .. tostring(s.currentTrack.file)
-    )
-
-    return true
-
-end
-
-
 local function enterMenuScreen(screen)
-
-    if screen ~= "title" and screen ~= "options" then
-        return
-    end
 
     if activeScreen == screen then
         return
     end
 
-    -- If we are changing menu screens, discard the previous visual cycle.
     local previousScreen = activeScreen
 
     if previousScreen ~= nil then
@@ -1143,30 +1004,23 @@ local function enterMenuScreen(screen)
     end
 
     activeScreen = screen
-    markScreenFrame(screen)
 
-    debugLog(
-        "MENU ENTER | Screen: " .. screen
-        .. " | Previous: " .. tostring(previousScreen)
-    )
+    debugLog("MENU ENTER | Screen: " .. screen .. " | Previous: " .. tostring(previousScreen))
 
-    enterScreen(screen)
-
-    local state = getState(screen)
-    state.postDrawAudioPending = true
+    -- The track is chosen now but played only once, after the native
+    -- menu finished drawing (see the menu draw wrapper).
+    if prepareScreen(screen) then
+        getState(screen).postDrawAudioPending = true
+    end
 
 end
 
 
-local function clearMenuOverlayIfNeeded(context)
+local function clearMenuOverlay()
 
-    if context == "submenu" then
-
-        if activeScreen == "title" or activeScreen == "options" then
-            resetScreenState(activeScreen)
-            clearActiveScreen("entered submenu")
-        end
-
+    if activeScreen == "title" or activeScreen == "options" then
+        resetScreenState(activeScreen)
+        clearActiveScreen("entered submenu")
     end
 
 end
@@ -1174,11 +1028,6 @@ end
 
 -- --------------------------------------------------------------
 -- REFRESH WRAPPER
--- --------------------------------------------------------------
---
--- This wrapper never changes screen state. It only draws an overlay
--- that has already been entered by the menu-draw controller below.
---
 -- --------------------------------------------------------------
 
 local function installRefreshOverlayWrapper()
@@ -1195,26 +1044,21 @@ local function installRefreshOverlayWrapper()
 
     refresh = function(...)
 
-        if menuDrawContext == "title"
-            or menuDrawContext == "options"
-        then
+        local screen = nil
 
-            local drawOk, drawErr = pcall(function()
-                drawScreen(menuDrawContext)
-            end)
+        if menuDrawContext == "title" or menuDrawContext == "options" then
+            screen = menuDrawContext
+        elseif menuDrawContext == nil and activeScreen == "replay" then
+            -- Replay has no per-frame hook of its own; draw it here.
+            screen = "replay"
+        end
 
-            if not drawOk then
-                debugLog(
-                    "ERROR in menu overlay: " .. tostring(drawErr)
-                )
-            elseif not refreshOverlayLogged then
-                refreshOverlayLogged = true
-                debugLog(
-                    "Refresh overlay: OK | Context: "
-                    .. tostring(menuDrawContext)
-                )
+        if screen ~= nil then
+            local ok, err = pcall(drawScreen, screen)
+
+            if not ok then
+                debugLog("ERROR in overlay (" .. screen .. "): " .. tostring(err))
             end
-
         end
 
         return originalRefresh(...)
@@ -1233,8 +1077,7 @@ end
 -- COMMON MENU DRAW WRAPPER
 -- --------------------------------------------------------------
 --
--- This is the ONLY place where Title/Options screen entry is
--- initiated. It is called once per actual native menu frame.
+-- The ONLY place where Title/Options screen entry is initiated.
 --
 -- --------------------------------------------------------------
 
@@ -1252,25 +1095,26 @@ local function installMenuDrawWrapper()
 
     local originalMenuDraw = main.f_menuCommonDraw
 
-    main.f_menuCommonDraw = function(t, item, cursorPosY, moveTxt, sec, bg, skipClear, opts)
+    main.f_menuCommonDraw = function(...)
 
         local context = menuContext
         local previousDrawContext = menuDrawContext
+        local isMenuScreen = context == "title" or context == "options"
 
-        -- Only Title and Options own the Random Screen BGM overlay.
-        if context == "title" or context == "options" then
+        if isMenuScreen then
 
             menuDrawContext = context
 
-            -- Start the cycle BEFORE native drawing. The native menu has
-            -- already selected/started its own BGM by this point, so our
-            -- playBgm(interrupt=true) safely becomes the active track.
-            enterMenuScreen(context)
+            local ok, err = pcall(enterMenuScreen, context)
+
+            if not ok then
+                debugLog("ERROR in enterMenuScreen: " .. tostring(err))
+            end
 
         elseif context == "submenu" then
 
             menuDrawContext = "submenu"
-            clearMenuOverlayIfNeeded(context)
+            clearMenuOverlay()
 
         else
 
@@ -1278,37 +1122,45 @@ local function installMenuDrawWrapper()
 
         end
 
-        local ok, result = pcall(
-            originalMenuDraw,
-            t,
-            item,
-            cursorPosY,
-            moveTxt,
-            sec,
-            bg,
-            skipClear,
-            opts
-        )
+        local results = packValues(pcall(originalMenuDraw, ...))
 
-        -- Native menu drawing is complete here. Reassert the selected
-        -- Random Screen BGM once, after the engine has finished its own
-        -- menu rendering/audio work. This is intentionally one-shot.
-        if ok and (context == "title" or context == "options") then
-            local state = getState(context)
+        if isMenuScreen and activeScreen == context then
 
-            if state.postDrawAudioPending then
-                reassertScreenMusic(context)
-                state.postDrawAudioPending = false
+            local s = state[context]
+
+            if s ~= nil and s.currentTrack ~= nil then
+
+                if s.postDrawAudioPending then
+
+                    s.postDrawAudioPending = false
+                    s.musicStarted = true
+                    playTrack(s.currentTrack)
+                    debugLog("Post-draw BGM play | Screen: " .. context .. " | Frame: " .. tostring(getFrameCount()))
+
+                else
+
+                    local offset = generalConfig.menuSafetyFrames[s.safetyStep + 1]
+                    local frame = getFrameCount()
+
+                    if offset ~= nil and frame ~= nil and frame - s.startFrame >= offset then
+                        s.safetyStep = s.safetyStep + 1
+                        playTrack(s.currentTrack, true)
+                        debugLog("Safety BGM check #" .. s.safetyStep .. " | Screen: " .. context .. " | Frame: " .. tostring(frame))
+                    end
+
+                end
+
             end
+
         end
 
         menuDrawContext = previousDrawContext
 
-        if not ok then
-            error(result)
+        if not results[1] then
+            error(results[2], 0)
         end
 
-        return result
+        return unpackValues(results, 2, results.n)
 
     end
 
@@ -1321,13 +1173,7 @@ end
 
 
 -- --------------------------------------------------------------
--- DIRECT MENU LOOP CONTEXT
--- --------------------------------------------------------------
---
--- main.menu.loop and its submenu loops already exist when external
--- modules are loaded. We wrap those existing functions rather than
--- trying to wrap main.f_createMenu after the functions were created.
---
+-- MENU LOOP CONTEXT
 -- --------------------------------------------------------------
 
 local function installMenuLoopContextWrappers()
@@ -1360,117 +1206,54 @@ local function installMenuLoopContextWrappers()
             local previousContext = menuContext
             menuContext = context
 
-            local ok, result = pcall(fn, ...)
+            local results = packValues(pcall(fn, ...))
 
             menuContext = previousContext
 
-            if not ok then
-                error(result)
+            if not results[1] then
+                error(results[2], 0)
             end
 
-            return result
+            return unpackValues(results, 2, results.n)
 
         end
 
         wrappedFunctions[fn] = wrapped
 
-        debugLog(
-            "Menu loop context installed | "
-            .. tostring(label)
-            .. " | Context: " .. tostring(context)
-        )
+        debugLog("Menu loop context installed | " .. tostring(label) .. " | Context: " .. context)
 
         return wrapped
 
     end
 
-    -- The real Main Menu.
-    main.menu.loop = wrapLoop(
-        main.menu.loop,
-        "title",
-        "main"
-    )
-
-    -- All main-menu submenus share the same native loop implementation,
-    -- but they must suppress Title/Options rendering while active.
+    -- All submenus share the native loop implementation but must
+    -- suppress Title/Options rendering while active.
     local function wrapSubmenus(tbl, path)
 
-        if type(tbl) ~= "table"
-            or type(tbl.submenu) ~= "table"
-        then
+        if type(tbl) ~= "table" or type(tbl.submenu) ~= "table" then
             return
         end
 
         for name, submenu in pairs(tbl.submenu) do
 
-            if type(submenu) == "table"
-                and type(submenu.loop) == "function"
-            then
-
-                submenu.loop = wrapLoop(
-                    submenu.loop,
-                    "submenu",
-                    path .. tostring(name)
-                )
-
-                wrapSubmenus(
-                    submenu,
-                    path .. tostring(name) .. "/"
-                )
-
+            if type(submenu) == "table" and type(submenu.loop) == "function" then
+                submenu.loop = wrapLoop(submenu.loop, "submenu", path .. tostring(name))
+                wrapSubmenus(submenu, path .. tostring(name) .. "/")
             end
 
         end
 
     end
 
+    main.menu.loop = wrapLoop(main.menu.loop, "title", "main")
     wrapSubmenus(main.menu, "")
 
-    -- Options is a separate loop tree and must have its own context.
     if type(options) == "table"
         and type(options.menu) == "table"
         and type(options.menu.loop) == "function"
     then
-
-        options.menu.loop = wrapLoop(
-            options.menu.loop,
-            "options",
-            "options"
-        )
-
-        local function wrapOptionSubmenus(tbl, path)
-
-            if type(tbl) ~= "table"
-                or type(tbl.submenu) ~= "table"
-            then
-                return
-            end
-
-            for name, submenu in pairs(tbl.submenu) do
-
-                if type(submenu) == "table"
-                    and type(submenu.loop) == "function"
-                then
-
-                    submenu.loop = wrapLoop(
-                        submenu.loop,
-                        "submenu",
-                        path .. tostring(name)
-                    )
-
-                    wrapOptionSubmenus(
-                        submenu,
-                        path .. tostring(name) .. "/"
-                    )
-
-                end
-
-            end
-
-        end
-
-        wrapOptionSubmenus(options.menu, "options/")
-
+        options.menu.loop = wrapLoop(options.menu.loop, "options", "options")
+        wrapSubmenus(options.menu, "options/")
     end
 
     menuLoopsWrapped = true
@@ -1481,43 +1264,39 @@ local function installMenuLoopContextWrappers()
 end
 
 
--- Install immediately. These functions already exist by the time the
--- external module is loaded in the standard IKEMEN GO 1.0.0 startup.
+local function installWrappers()
+    installRefreshOverlayWrapper()
+    installMenuDrawWrapper()
+    installMenuLoopContextWrappers()
+end
+
+
+-- Refresh/menu-draw exist at load time in IKEMEN GO 1.0.0. The menu
+-- loops may not, so every wrapper is retried lazily from the hooks.
 installRefreshOverlayWrapper()
 installMenuDrawWrapper()
 
 
 -- --------------------------------------------------------------
--- MENU ITEM / SELECT / VERSUS
+-- MENU ITEM (REPLAY)
 -- --------------------------------------------------------------
 
 local function onMenuItem(t, item)
 
-    if t == nil
-        or item == nil
-        or t[item] == nil
-    then
+    if t == nil or item == nil or t[item] == nil then
         return
     end
 
-    local itemName = t[item].itemname
-
-    -- Replay entry remains on main.t_itemname.
-    if itemName == "replay" then
-
+    if t[item].itemname == "replay" then
         activeScreen = "replay"
-        markScreenFrame("replay")
-
-        resetScreenState("replay")
         enterScreen("replay")
-
     end
 
 end
 
 
 -- --------------------------------------------------------------
--- SELECT RESET
+-- SELECT / VERSUS
 -- --------------------------------------------------------------
 
 local function onSelectReset()
@@ -1528,55 +1307,30 @@ local function onSelectReset()
 end
 
 
--- --------------------------------------------------------------
--- SELECT
--- --------------------------------------------------------------
+local function onSessionScreen(screen)
 
-local function onSelect()
+    activeScreen = screen
+    markScreenFrame(screen)
 
-    activeScreen = "select"
-    lastSelectFrame = getFrameCount()
-    markScreenFrame("select")
+    local s = state[screen]
 
-    local s = getState("select")
-
-    if s.currentTrack == nil then
-        enterScreen("select")
+    if s == nil or s.currentTrack == nil then
+        enterScreen(screen)
     else
-        drawScreen("select")
+        drawScreen(screen)
     end
 
 end
 
 
--- --------------------------------------------------------------
--- VERSUS
--- --------------------------------------------------------------
-
-local function onVersus()
-
-    activeScreen = "versus"
-    markScreenFrame("versus")
-
-    local s = getState("versus")
-
-    if s.currentTrack == nil then
-        enterScreen("versus")
-    else
-        drawScreen("versus")
-    end
-
-end
-
-
--- SELECT EXIT WATCHDOG
+-- ============================================================
+-- SELECT / VERSUS EXIT WATCHDOG
 -- ============================================================
 --
--- The Select screen hook is called while the Character Select
--- screen is active. When the game returns to the mode menu, that
--- hook stops running. We use the global loop to detect that gap
--- and clear the previous Select overlay without depending on a
--- specific menu hook.
+-- The Select and Versus hooks run every frame while those screens
+-- are active. When a hook stops running, the screen was left: its
+-- state is reset so the next visit gets a new random track (e.g. the
+-- Versus screen before every Arcade match).
 --
 -- ============================================================
 
@@ -1588,111 +1342,62 @@ local function onGlobalLoop()
         return
     end
 
-    if activeScreen == "select"
-        and lastSelectFrame ~= nil
-        and frame - lastSelectFrame > selectLeaveGraceFrames
-    then
-        debugLog(
-            "Select hook stopped | Last frame: "
-            .. tostring(lastSelectFrame)
-            .. " | Current frame: "
-            .. tostring(frame)
-        )
+    for i = 1, #watchedScreens do
 
-        resetScreenState("select")
-        clearActiveScreen("select hook stopped")
-        lastSelectFrame = nil
+        local screen = watchedScreens[i]
+        local last = lastFrameByScreen[screen]
+
+        if last ~= nil and frame - last > generalConfig.leaveGraceFrames then
+
+            lastFrameByScreen[screen] = nil
+
+            debugLog(screen .. " hook stopped | Last frame: " .. tostring(last))
+
+            resetScreenState(screen)
+
+            if activeScreen == screen then
+                clearActiveScreen(screen .. " hook stopped")
+            end
+
+        end
+
     end
 
 end
 
 
 -- --------------------------------------------------------------
--- POST-MATCH INITIALIZATION
+-- POST-MATCH SCREENS
 -- --------------------------------------------------------------
 --
--- IKEMEN GO calls the *_init hooks BEFORE the native result/victory/
--- continue BGM is played. If this module calls playBgm() from the
--- init hook, the engine immediately replaces it with its own music.
---
--- Therefore post-match screens are prepared during *_init and their
--- custom BGM is started on the first *_screen hook, after the native
--- BGM setup has completed.
+-- *_init hooks run BEFORE the native BGM is played, so the track is
+-- chosen in *_init and started on the first *_screen hook.
 --
 -- --------------------------------------------------------------
 
-local function prepareScreen(screen)
+local function postMatchInit(screen)
 
-    local config = screenConfig[screen]
+    activeScreen = screen
+    resetScreenState(screen)
 
-    if config == nil
-        or not config.enabled
-        or #config.playlist == 0
-    then
-        return false
+    if not isScreenEnabled(screenConfig[screen]) then
+        return
     end
 
     local track = nextTrack(screen)
 
     if track == nil then
-        return false
+        return
     end
 
     local s = getState(screen)
 
     s.currentTrack = track
     s.startFrame = getFrameCount()
-    s.anim = nil
-    s.text = nil
-    s.musicStarted = false
 
-    debugLog(
-        "Prepare: " .. screen
-        .. " | Track: " .. tostring(track.file)
-        .. " | Display: " .. tostring(config.display)
-        .. " | Frame: " .. tostring(s.startFrame)
-    )
-
-    return true
-
-end
-
-
-local function startPreparedMusic(screen)
-
-    local s = getState(screen)
-
-    if s.currentTrack == nil or s.musicStarted then
-        return
+    if debugConfig.enabled then
+        debugLog("Prepare: " .. screen .. " | Track: " .. tostring(track.file))
     end
-
-    playBgm({
-        bgm = s.currentTrack.file,
-        loop = 1,
-        volume = 100,
-        loopstart = 0,
-        loopend = 0,
-        interrupt = true,
-    })
-
-    s.musicStarted = true
-
-    debugLog(
-        "Play deferred: " .. screen
-        .. " | Track: " .. tostring(s.currentTrack.file)
-        .. " | Frame: " .. tostring(getFrameCount())
-    )
-
-end
-
-
-local function postMatchInit(screen)
-
-    activeScreen = screen
-    markScreenFrame(screen)
-
-    resetScreenState(screen)
-    prepareScreen(screen)
 
 end
 
@@ -1702,14 +1407,25 @@ local function postMatchDraw(screen)
     return function()
 
         activeScreen = screen
-        markScreenFrame(screen)
 
-        startPreparedMusic(screen)
+        local s = state[screen]
+
+        if s == nil or s.currentTrack == nil then
+            return
+        end
+
+        if not s.musicStarted then
+            playTrack(s.currentTrack)
+            s.musicStarted = true
+            debugLog("Play deferred: " .. screen)
+        end
+
         drawScreen(screen)
 
     end
 
 end
+
 
 -- ============================================================
 -- INITIALIZATION
@@ -1717,37 +1433,27 @@ end
 
 loadSff()
 
+-- Preload the font so the first title display does not hitch.
+if musicTitleConfig.enabled then
+    for _, config in pairs(screenConfig) do
+        if config.enabled
+            and (config.display == "text" or config.display == "both")
+        then
+            getMusicFont()
+            break
+        end
+    end
+end
 
 debugLog("Module loaded | RELEASE")
 
 
-
 -- ============================================================
--- MENU DRAW OVERLAY
--- ============================================================
---
--- Standard menu hooks run before IKEMEN GO draws the menu.
--- Drawing the music title directly from those hooks would make
--- it get overwritten by the native menu renderer.
---
--- The common menu draw function is wrapped so the music title/SFF
--- is drawn after the native menu and remains visible.
---
--- ============================================================
-
--- Wrapper is installed lazily from the hooks above, because external modules
--- may be loaded before main.f_menuCommonDraw exists.
-
-
--- ============================================================
--- SAFETY WRAPPER
+-- HOOKS
 -- ============================================================
 --
--- A Lua error thrown inside a hook callback can silently break
--- the rest of that frame's hook chain (including native engine
--- drawing that runs after it), with nothing visible on screen
--- and no crash dialog. Every hook callback is wrapped so any
--- error is caught and written to the debug log instead.
+-- Every hook callback is wrapped so a Lua error is written to the
+-- debug log instead of breaking the rest of that frame's hook chain.
 --
 -- ============================================================
 
@@ -1766,163 +1472,72 @@ local function safeHook(label, fn)
 end
 
 
-if type(hook) == "table"
-    and type(hook.add) == "function"
-then
+if type(hook) == "table" and type(hook.add) == "function" then
 
-    -- ============================================================
-    -- MAIN MENU / OPTIONS CONTEXT
-    -- ============================================================
-    --
-    -- IMPORTANT:
-    -- At external-module load time, IKEMEN GO has not necessarily created
-    -- main.menu.loop/options.menu.loop yet. V13 tried to wrap them
-    -- immediately, so the wrappers were never installed. The V13 debug
-    -- log proved this: it contained "Menu draw wrapper installed" but
-    -- never "Menu loop contexts installed".
-    --
-    -- Install the loop wrappers lazily from the native hooks, when the
-    -- actual menu functions already exist. The current invocation also
-    -- receives its context immediately; later invocations use the wrappers.
-    -- ============================================================
+    local function setMenuContext(context)
 
-    hook.add(
-        "main.menu.loop",
-        "randomScreenBgmMainMenuContext",
+        installWrappers()
+
+        if menuContext ~= context then
+            menuContext = context
+            debugLog("Menu context: " .. context)
+        end
+
+    end
+
+    hook.add("main.menu.loop", "randomScreenBgmMainMenuContext",
         safeHook("main.menu.loop context", function()
+            setMenuContext("title")
+        end))
 
-            installMenuLoopContextWrappers()
-
-            menuContext = "title"
-
-            debugLog("Menu context: title")
-
-        end)
-    )
-
-    hook.add(
-        "options.menu.loop",
-        "randomScreenBgmOptionsContext",
+    hook.add("options.menu.loop", "randomScreenBgmOptionsContext",
         safeHook("options.menu.loop context", function()
+            setMenuContext("options")
+        end))
 
-            installMenuLoopContextWrappers()
+    -- Select/Versus exit watchdog
+    hook.add("loop", "randomScreenBgmSelectExitWatchdog",
+        safeHook("onGlobalLoop", onGlobalLoop))
 
-            menuContext = "options"
+    -- Replay entry
+    hook.add("main.t_itemname", "randomScreenBgmMenuItems",
+        safeHook("onMenuItem", onMenuItem))
 
-            debugLog("Menu context: options")
+    -- Character Select / Versus
+    hook.add("start.f_selectReset", "randomScreenBgmSelectReset",
+        safeHook("onSelectReset", onSelectReset))
 
-        end)
-    )
+    hook.add("start.f_selectScreen", "randomScreenBgmSelect",
+        safeHook("onSelect", function()
+            onSessionScreen("select")
+        end))
 
-    -- Global Select exit watchdog
-    hook.add(
-        "loop",
-        "randomScreenBgmSelectExitWatchdog",
-        safeHook("onGlobalLoop", onGlobalLoop)
-    )
+    hook.add("start.f_selectVersus", "randomScreenBgmVersus",
+        safeHook("onVersus", function()
+            onSessionScreen("versus")
+        end))
 
-    -- Options / Replay entry
-    -- main.t_itemname is fired by IKEMEN GO when a menu item is
-    -- selected, immediately before the corresponding action runs.
-    hook.add(
-        "main.t_itemname",
-        "randomScreenBgmMenuItems",
-        safeHook("onMenuItem", onMenuItem)
-    )
+    -- Post-match screens
+    local postMatchHooks = {
+        { screen = "results",    init = "game.result_init",     draw = "game.result",     id = "Results" },
+        { screen = "victory",    init = "game.victory_init",    draw = "game.victory",    id = "Victory" },
+        { screen = "continue",   init = "game.continue_init",   draw = "game.continue",   id = "Continue" },
+        { screen = "hiscore",    init = "game.hiscore_init",    draw = "game.hiscore",    id = "Hiscore" },
+        { screen = "challenger", init = "game.challenger_init", draw = "game.challenger", id = "Challenger" },
+    }
 
-    -- Character Select
-    hook.add(
-        "start.f_selectReset",
-        "randomScreenBgmSelectReset",
-        safeHook("onSelectReset", onSelectReset)
-    )
+    for _, h in ipairs(postMatchHooks) do
 
-    hook.add(
-        "start.f_selectScreen",
-        "randomScreenBgmSelect",
-        safeHook("onSelect", onSelect)
-    )
+        local screen = h.screen
 
-    -- Versus
-    hook.add(
-        "start.f_selectVersus",
-        "randomScreenBgmVersus",
-        safeHook("onVersus", onVersus)
-    )
+        hook.add(h.init, "randomScreenBgm" .. h.id .. "Init",
+            safeHook("postMatchInit:" .. screen, function()
+                postMatchInit(screen)
+            end))
 
-    -- Results
-    hook.add(
-        "game.result_init",
-        "randomScreenBgmResultsInit",
-        safeHook("postMatchInit:results", function()
-            postMatchInit("results")
-        end)
-    )
+        hook.add(h.draw, "randomScreenBgm" .. h.id,
+            safeHook("postMatchDraw:" .. screen, postMatchDraw(screen)))
 
-    hook.add(
-        "game.result",
-        "randomScreenBgmResults",
-        safeHook("postMatchDraw:results", postMatchDraw("results"))
-    )
-
-    -- Victory
-    hook.add(
-        "game.victory_init",
-        "randomScreenBgmVictoryInit",
-        safeHook("postMatchInit:victory", function()
-            postMatchInit("victory")
-        end)
-    )
-
-    hook.add(
-        "game.victory",
-        "randomScreenBgmVictory",
-        safeHook("postMatchDraw:victory", postMatchDraw("victory"))
-    )
-
-    -- Continue
-    hook.add(
-        "game.continue_init",
-        "randomScreenBgmContinueInit",
-        safeHook("postMatchInit:continue", function()
-            postMatchInit("continue")
-        end)
-    )
-
-    hook.add(
-        "game.continue",
-        "randomScreenBgmContinue",
-        safeHook("postMatchDraw:continue", postMatchDraw("continue"))
-    )
-
-    -- Hiscore
-    hook.add(
-        "game.hiscore_init",
-        "randomScreenBgmHiscoreInit",
-        safeHook("postMatchInit:hiscore", function()
-            postMatchInit("hiscore")
-        end)
-    )
-
-    hook.add(
-        "game.hiscore",
-        "randomScreenBgmHiscore",
-        safeHook("postMatchDraw:hiscore", postMatchDraw("hiscore"))
-    )
-
-    -- Challenger
-    hook.add(
-        "game.challenger_init",
-        "randomScreenBgmChallengerInit",
-        safeHook("postMatchInit:challenger", function()
-            postMatchInit("challenger")
-        end)
-    )
-
-    hook.add(
-        "game.challenger",
-        "randomScreenBgmChallenger",
-        safeHook("postMatchDraw:challenger", postMatchDraw("challenger"))
-    )
+    end
 
 end
