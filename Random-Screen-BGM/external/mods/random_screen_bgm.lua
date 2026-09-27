@@ -84,15 +84,12 @@ end
 --   "sprite" = SFF image only
 --   "both"   = music title + SFF image
 --
+-- file:
+--   Path of the audio file, relative to the IKEMEN GO folder, just
+--   like the [Music] section of system.def (e.g. "sound/Title.mp3").
+--   Subfolders also work (e.g. "sound/clashbound/select.mp3").
+--
 -- ============================================================
-
-local function displayUsesText(config)
-    return config.display == "text" or config.display == "both"
-end
-
-local function displayUsesSprite(config)
-    return config.display == "sprite" or config.display == "both"
-end
 
 
 -- --------------------------------------------------------------
@@ -104,20 +101,19 @@ local screenConfig = {
     title = {
         enabled = true,
         display = "text",
-        folder = "sound/random_screen_bgm/title/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/title/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/title/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/title/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -131,20 +127,19 @@ local screenConfig = {
     options = {
         enabled = true,
         display = "text",
-        folder = "sound/random_screen_bgm/options/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/options/Eternal Champions.mp3",
+                file = "sound/Eternal Champions.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/options/Marvel Super Heroes.mp3",
+                file = "sound/Marvel Super Heroes.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/options/Samurai Shodown.mp3",
+                file = "sound/Samurai Shodown.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -158,20 +153,19 @@ local screenConfig = {
     select = {
         enabled = true,
         display = "sprite",
-        folder = "sound/random_screen_bgm/select/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/select/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/select/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/select/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -185,20 +179,19 @@ local screenConfig = {
     versus = {
         enabled = true,
         display = "sprite",
-        folder = "sound/random_screen_bgm/versus/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/versus/ssbu.mp3",
+                file = "sound/ssbu.mp3",
                 sffGroup = 0,
                 sffIndex = 4,
             },
             {
-                file = "sound/random_screen_bgm/versus/Naruto -The Raising Fighting Spirit.mp3",
+                file = "sound/Naruto -The Raising Fighting Spirit.mp3",
                 sffGroup = 0,
                 sffIndex = 5,
             },
             {
-                file = "sound/random_screen_bgm/versus/Versus Mode - Street Fighter X Tekken.mp3",
+                file = "sound/Versus Mode - Street Fighter X Tekken.mp3",
                 sffGroup = 0,
                 sffIndex = 6,
             },
@@ -212,20 +205,19 @@ local screenConfig = {
     results = {
         enabled = true,
         display = "sprite",
-        folder = "sound/random_screen_bgm/results/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/results/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/results/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/results/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -239,20 +231,19 @@ local screenConfig = {
     victory = {
         enabled = true,
         display = "text",
-        folder = "sound/random_screen_bgm/victory/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/victory/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/victory/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/victory/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -266,20 +257,19 @@ local screenConfig = {
     continue = {
         enabled = true,
         display = "sprite",
-        folder = "sound/random_screen_bgm/continue/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/continue/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/continue/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/continue/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -293,20 +283,19 @@ local screenConfig = {
     hiscore = {
         enabled = true,
         display = "text",
-        folder = "sound/random_screen_bgm/hiscore/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/hiscore/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/hiscore/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/hiscore/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -320,20 +309,19 @@ local screenConfig = {
     challenger = {
         enabled = true,
         display = "sprite",
-        folder = "sound/random_screen_bgm/challenger/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/challenger/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/challenger/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/challenger/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -347,20 +335,19 @@ local screenConfig = {
     replay = {
         enabled = true,
         display = "text",
-        folder = "sound/random_screen_bgm/replay/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/replay/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/replay/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/replay/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
@@ -375,20 +362,19 @@ local screenConfig = {
     gameover = {
         enabled = false,
         display = "text",
-        folder = "sound/random_screen_bgm/gameover/",
         playlist = {
             {
-                file = "sound/random_screen_bgm/gameover/Street Fighter 2.mp3",
+                file = "sound/Street Fighter 2.mp3",
                 sffGroup = 0,
                 sffIndex = 1,
             },
             {
-                file = "sound/random_screen_bgm/gameover/Mortal Kombat.mp3",
+                file = "sound/Mortal Kombat.mp3",
                 sffGroup = 0,
                 sffIndex = 2,
             },
             {
-                file = "sound/random_screen_bgm/gameover/The King Of Fighters 94.mp3",
+                file = "sound/The King Of Fighters 94.mp3",
                 sffGroup = 0,
                 sffIndex = 3,
             },
