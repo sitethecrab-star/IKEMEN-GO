@@ -640,6 +640,7 @@ local function playTrack(track, keepIfPlaying)
     playBgm({
         bgm = track.file,
         loop = 1,
+        loopcount = -1,
         volume = generalConfig.volume,
         loopstart = 0,
         loopend = 0,
