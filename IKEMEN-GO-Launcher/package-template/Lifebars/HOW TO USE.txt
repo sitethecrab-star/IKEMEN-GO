@@ -1,0 +1,6 @@
+﻿LIFEBARS
+========
+Put one folder per lifebar here, with its .def inside
+(any name works, e.g. fight.def, VP_Fight.def):
+
+    Lifebars\SF6\fight.def

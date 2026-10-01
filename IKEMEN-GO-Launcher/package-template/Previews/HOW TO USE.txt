@@ -1,0 +1,4 @@
+﻿PREVIEWS
+========
+Preview images you add through the Launcher (stages, lifebars,
+screenpacks). You do not need to touch this folder.

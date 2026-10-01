@@ -1,0 +1,8 @@
+﻿CHARACTERS
+==========
+Put one folder per character here, with its .def inside:
+
+    Characters\Ryu\Ryu.def
+    Characters\Bonus\DuckHunt\DuckHunt.def   (subfolders also work)
+
+Characters from the IKEMEN GO chars\ folder also show up in the Launcher.
