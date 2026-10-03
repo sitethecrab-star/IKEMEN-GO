@@ -1,8 +1,0 @@
-﻿STAGES
-======
-Put stages here (the .def and its files), loose or in folders:
-
-    Stages\MyStage.def
-    Stages\Temple\Temple.def
-
-Stages from the IKEMEN GO stages\ folder also show up in the Launcher.

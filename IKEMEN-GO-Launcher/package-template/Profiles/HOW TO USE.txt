@@ -1,4 +1,0 @@
-﻿PROFILES
-========
-Profiles are saved here (.json). To give a profile to someone else, copy
-the file into the Profiles folder of their Launcher.

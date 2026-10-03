@@ -1,9 +1,0 @@
-﻿SCREENPACKS
-===========
-Put one folder per screenpack here, with its system.def inside:
-
-    Screenpacks\Capcom vs SNK\system.def
-
-If the screenpack has several versions (e.g. "120 slots.def",
-"204 slots.def"), they are grouped together with a variant selector.
-The default IKEMEN screenpack (data\ folder) also shows up.
